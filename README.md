@@ -101,9 +101,27 @@ Vercel da environment variables kerak emas, lekin rate limiting uchun qo'shishin
 
 ## ⚠️ Limitations
 
-- Vercel Serverless Functions 10 soniya timeout
-- Cloudflare himoyasi bo'lgan saytlar ishlamasligi mumkin
+- Vercel Serverless Functions 10 soniya timeout (Puppeteer uchun yetarli bo'lmasligi mumkin)
+- Cloudflare bypass uchun Puppeteer + Chromium ishlatiladi (sekinroq)
+- Birinchi so'rov sekin bo'lishi mumkin (cold start)
 - Rate limiting yo'q (o'zingiz qo'shing)
+
+## 🚀 Alternative: Railway/Render Deploy
+
+Agar Vercel da muammo bo'lsa, Railway yoki Render da deploy qiling:
+
+### Railway
+```bash
+railway login
+railway init
+railway up
+```
+
+### Render
+1. GitHub repository ni ulang
+2. "New Web Service" yarating
+3. Build Command: `npm install`
+4. Start Command: `node server-puppeteer.js`
 
 ## 📄 License
 

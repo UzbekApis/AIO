@@ -1,5 +1,5 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 
 const SUPPORTED_PLATFORMS = [
     'instagram.com', 'facebook.com', 'fb.watch', 'pinterest.com', 'pin.it',
@@ -18,53 +18,88 @@ function isValidUrl(url) {
     }
 }
 
-// Token olish
+// Token olish (Puppeteer bilan)
 async function getToken() {
+    let browser = null;
+    
     try {
-        const response = await axios.get('https://getindevice.com/', {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Cache-Control': 'no-cache'
-            },
-            timeout: 15000
+        browser = await puppeteer.launch({
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: chromium.headless,
         });
-
-        const $ = cheerio.load(response.data);
-        const token = $('#token').val();
+        
+        const page = await browser.newPage();
+        
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36');
+        
+        await page.goto('https://getindevice.com/', {
+            waitUntil: 'networkidle0',
+            timeout: 30000
+        });
+        
+        // Cloudflare challenge kutish
+        await page.waitForTimeout(3000);
+        
+        // Token ni olish
+        const token = await page.evaluate(() => {
+            const tokenInput = document.getElementById('token');
+            return tokenInput ? tokenInput.value : null;
+        });
         
         if (!token) {
             throw new Error('Token topilmadi');
         }
-
+        
         return token;
-    } catch (error) {
-        throw new Error('Token olishda xatolik: ' + error.message);
+    } finally {
+        if (browser) {
+            await browser.close();
+        }
     }
 }
 
 // Video ma'lumotlarini olish
 async function getVideoData(url, token) {
+    let browser = null;
+    
     try {
-        const formData = new URLSearchParams();
-        formData.append('url', url);
-        formData.append('token', token);
-
-        const response = await axios.post('https://getindevice.com/wp-json/aio-dl/video-data/', formData, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Accept': '*/*',
-                'Origin': 'https://getindevice.com',
-                'Referer': 'https://getindevice.com/'
-            },
-            timeout: 30000
+        browser = await puppeteer.launch({
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath: await chromium.executablePath(),
+            headless: chromium.headless,
         });
-
-        return response.data;
-    } catch (error) {
-        throw new Error('Video ma\'lumotlarini olishda xatolik: ' + error.message);
+        
+        const page = await browser.newPage();
+        
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36');
+        
+        // API ga so'rov yuborish
+        const response = await page.evaluate(async (url, token) => {
+            const formData = new URLSearchParams();
+            formData.append('url', url);
+            formData.append('token', token);
+            
+            const res = await fetch('https://getindevice.com/wp-json/aio-dl/video-data/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Origin': 'https://getindevice.com',
+                    'Referer': 'https://getindevice.com/'
+                },
+                body: formData
+            });
+            
+            return await res.json();
+        }, url, token);
+        
+        return response;
+    } finally {
+        if (browser) {
+            await browser.close();
+        }
     }
 }
 
@@ -98,10 +133,11 @@ module.exports = async (req, res) => {
             });
         }
 
-        // Token olish
+        console.log('Token olinmoqda...');
         const token = await getToken();
+        console.log('Token olindi');
         
-        // Video ma'lumotlarini olish
+        console.log('Video ma\'lumotlari yuklanmoqda...');
         const videoData = await getVideoData(url, token);
 
         res.status(200).json({
